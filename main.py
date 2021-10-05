@@ -15,5 +15,5 @@ if __name__ == "__main__":
         rs_name
     )
     profiler.get_data()
-    profiler.coordinates_computes()
+    profiler.coordinates()
     # profiler._data_formation()
