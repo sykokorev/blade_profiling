@@ -1,12 +1,20 @@
 # -*- coding: utf-8 -*-
+
+import os
+
+
 import profiling_class as profiler
 
 
 if __name__ == "__main__":
-    input_file = r"./data/St_base_m90.REZ"
+    root_dir = os.getcwd()
+    data_dir = os.path.join(root_dir, "data")
+
+    input_file = os.path.join(data_dir, "St_base_m90.REZ")
     geometrical_parameters = tuple([
         'AL0', 'AL1', 'AL2', 'BE2', 'BE1K', 'BE1П', 'BE1',
-        'HЛ', 'T', 'A/T', 'D1', 'D2', 'B', 'A/T'
+        'HЛ', 'T', 'A/T', 'D1', 'D2', 'B', 'A/T', 'ZЛ', 'L',
+        'ГAMMA', 'TETA'
     ])
     rs_name = tuple(['Init', 'PK', 'CA'])
     profiler = profiler.Profiling(
@@ -16,4 +24,5 @@ if __name__ == "__main__":
     )
     profiler.get_data()
     profiler.coordinates()
-    # profiler._data_formation()
+    profiler.twist_law()
+    profiler.save_curve_files()
