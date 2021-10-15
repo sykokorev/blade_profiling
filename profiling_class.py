@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import pip
 import os
 
 import pandas as pd
@@ -14,6 +15,13 @@ from common_class import CommonClass
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_colwidth', None)
+
+
+def install(package):
+    if hasattr(pip, 'main'):
+        pip.main(['install', package])
+    else:
+        pip._internal.main(['install', package])
 
 
 def _dict_unpack(d, parent_key, sep):
@@ -49,10 +57,9 @@ def get_unique_keys(*args):
 
 class Profiling:
 
-    def __init__(self, in_file=None, parameters=None, rs_name=None):
+    def __init__(self, in_file=None, parameters=None, rs_name=None, **laws):
 
         self.dir_handle = CommonClass()
-
         self.root_dir = os.getcwd()
         self.names = ['param', 'rs']
         self.in_file = in_file
@@ -70,6 +77,7 @@ class Profiling:
         self.data_frame = pd.read_csv(in_file, header=None, encoding="cp1251")
         self.data = {}
         self.ab_data = pd.DataFrame()
+        self.laws = laws
 
     @staticmethod
     def line_equation(x1, y1, x2, y2, yi):
@@ -125,11 +133,18 @@ class Profiling:
 
         return data
 
-    def _coordinates(self, dz_=1.2, sweep_beta=0, stacking_law=0):
-        # Stacking law 0 - Center of gravity
+    def _coordinates(self, dz_=1.2, sweep_beta=0, stacking_law=0, surface_setup=0):
+        if 'stacking_law' in self.laws.keys():
+            stacking_law = self.laws['stacking_law']
+        if 'surface_setup' in self.laws.keys():
+            surface_setup = self.laws['surface_setup']
+
+        # Stacking laws:
+        # 0 - Center of gravity
         # 1 - Leading edge
         # 2 - Trailing edge
         # in any other case - Trailing edge
+
         df = pd.DataFrame(self._data_formation())
         d_throat_tip = {}
         d_throat_hub = {}
@@ -284,22 +299,32 @@ class Profiling:
 
             self.tip[stage] = zip(z_coordinates[stage], d_tip[stage])
             self.hub[stage] = zip(z_coordinates[stage], d_hub[stage])
-            ref_trace[stage] = tuple([
-                self.z[stage][0], self.z[stage][0],
-                self.r_tip[stage][0],
-                self.r_hub[stage][0],
-                self.slope_angle(self.z[stage][0], self.r_tip[stage][0],
-                                 self.z[stage][1], self.r_tip[stage][1]),
-                self.slope_angle(self.z[stage][0], self.r_hub[stage][0],
-                                 self.z[stage][1], self.r_hub[stage][1]),
-                self.z[stage][2], self.z[stage][2],
-                self.r_tip[stage][2],
-                self.r_hub[stage][2],
-                self.slope_angle(self.z[stage][2], self.r_tip[stage][2],
-                                 self.z[stage][3], self.r_tip[stage][3]),
-                self.slope_angle(self.z[stage][2], self.r_hub[stage][2],
-                                 self.z[stage][3], self.r_hub[stage][3]),
-            ])
+            if surface_setup == 0:
+                ref_trace[stage] = tuple([
+                    self.z[stage][0], self.z[stage][0],
+                    self.r_tip[stage][0],
+                    self.r_hub[stage][0],
+                    self.slope_angle(self.z[stage][0], self.r_tip[stage][0],
+                                     self.z[stage][1], self.r_tip[stage][1]),
+                    self.slope_angle(self.z[stage][0], self.r_hub[stage][0],
+                                     self.z[stage][1], self.r_hub[stage][1]),
+                    self.z[stage][2], self.z[stage][2],
+                    self.r_tip[stage][2],
+                    self.r_hub[stage][2],
+                    self.slope_angle(self.z[stage][2], self.r_tip[stage][2],
+                                     self.z[stage][3], self.r_tip[stage][3]),
+                    self.slope_angle(self.z[stage][2], self.r_hub[stage][2],
+                                     self.z[stage][3], self.r_hub[stage][3]),
+                ])
+            elif surface_setup == 1:
+                ref_trace[stage] = tuple([
+                    self.r_tip[stage][0],
+                    self.r_hub[stage][0],
+                    self.r_tip[stage][2],
+                    self.r_hub[stage][2]
+                ])
+            else:
+                pass
             if stacking_law == 0:
                 sweep[stage] = [self.z[stage][0] + (self.z[stage][1] - self.z[stage][0]) / 2,
                                 sweep_beta,
@@ -366,16 +391,26 @@ class Profiling:
         )
         coordinates = coordinates.append(pd.DataFrame(zth, index=index))
 
-        arrays = [
-            ['REF_TRACE_TIP_Z', 'REF_TRACE_HUB_Z',
-             'REF_TRACE_TIP_R', 'REF_TRACE_HUB_R',
-             'REF_TRACE_TIP_ALPHA', 'REF_TRACE_HUB_ALPHA'] * 2,
-            ['gv']*6 + ['rb']*6
-        ]
-        index = pd.MultiIndex.from_tuples(
-            list(zip(*arrays)), names=self.names
-        )
-        coordinates = coordinates.append(pd.DataFrame(ref_trace, index=index))
+        if surface_setup == 0:
+            arrays = [
+                ['REF_TRACE_TIP_Z', 'REF_TRACE_HUB_Z',
+                 'REF_TRACE_TIP_R', 'REF_TRACE_HUB_R',
+                 'REF_TRACE_TIP_ALPHA', 'REF_TRACE_HUB_ALPHA'] * 2,
+                ['gv']*6 + ['rb']*6
+            ]
+            index = pd.MultiIndex.from_tuples(
+                list(zip(*arrays)), names=self.names
+            )
+            coordinates = coordinates.append(pd.DataFrame(ref_trace, index=index))
+        elif surface_setup == 1:
+            arrays = [
+                ['REF_TRACE_TIP_R', 'REF_TRACE_HUB_R']*2,
+                ['gv'] * 2 + ['rb'] * 2
+            ]
+            index = pd.MultiIndex.from_tuples(
+                list(zip(*arrays)), names=self.names
+            )
+            coordinates = coordinates.append(pd.DataFrame(ref_trace, index=index))
 
         arrays = [
             ['Z_STACKING_SWEEP', 'SWEEP_BETA']*2,
@@ -399,12 +434,21 @@ class Profiling:
 
         return coordinates
 
-    def _twist_law(self, law=1):
-        # law: 1 - twisted by constant circulation law;
-        # law: 2 - twisted by constant reactivity
+    def _twist_law(self, twist_law=0, profile_law=0):
+
+        if 'profile_law' in self.laws.keys():
+            profile_law = self.laws['profile_law']
+        if 'twist_law' in self.laws.keys():
+            twist_law = self.laws['twist_law']
+
+        # twist_law: 0 - twisted by constant circulation law;
+        # twist_law: 1 - twisted by constant reactivity
+        # profile_law: 0 - Throat base law
+        # profile_law: 1 - Legacy law
+
         df = pd.DataFrame(self._data_formation())
 
-        if law == 1:
+        if twist_law == 0:
             for stage in list(range(1, self.stages_num + 1)):
                 # Alfa GV
                 # alfa_0/1[0] - hub, alfa_0/1[1] - mid, alfa_0/1[2] - shroud
@@ -445,31 +489,36 @@ class Profiling:
                 ]
                 self.beta[stage] = beta_1 + beta_2
 
-                # Throat width
-                # throat_width[stage][GV(hub, mid, tip), RB(hub, mid, tip)]
-                self.throat_width[stage] = [
-                    math.sin(math.radians(alfa_1[0])) * 2 *
-                    math.pi * self.r_hub[stage][1] / df[stage]['CA.ZЛ'],
+                if profile_law == 0:
+                    # Throat width
+                    # throat_width[stage][GV(hub, mid, tip), RB(hub, mid, tip)]
+                    self.throat_width[stage] = [
+                        math.sin(math.radians(alfa_1[0])) * 2 *
+                        math.pi * self.r_hub[stage][1] / df[stage]['CA.ZЛ'],
 
-                    # math.sin(math.radians(alfa_1[1])) * 2 *
-                    # math.pi * r_mid_gv / df[stage]['CA.ZЛ'],
-                    math.sin(math.radians(alfa_1[1])) * 2 *
-                    math.pi * r_mid_gv / df[stage]['CA.ZЛ'],
+                        # math.sin(math.radians(alfa_1[1])) * 2 *
+                        # math.pi * r_mid_gv / df[stage]['CA.ZЛ'],
+                        math.sin(math.radians(alfa_1[1])) * 2 *
+                        math.pi * r_mid_gv / df[stage]['CA.ZЛ'],
 
-                    math.sin(math.radians(alfa_1[2])) * 2 *
-                    math.pi * self.r_tip[stage][1] / df[stage]['CA.ZЛ'],
+                        math.sin(math.radians(alfa_1[2])) * 2 *
+                        math.pi * self.r_tip[stage][1] / df[stage]['CA.ZЛ'],
 
-                    math.sin(math.radians(beta_2[0])) * 2 *
-                    math.pi * self.r_hub[stage][3] / df[stage]['PK.ZЛ'],
+                        math.sin(math.radians(beta_2[0])) * 2 *
+                        math.pi * self.r_hub[stage][3] / df[stage]['PK.ZЛ'],
 
-                    math.sin(math.radians(beta_2[1])) * 2 *
-                    math.pi * r_mid_rb / df[stage]['PK.ZЛ'],
+                        math.sin(math.radians(beta_2[1])) * 2 *
+                        math.pi * r_mid_rb / df[stage]['PK.ZЛ'],
 
-                    math.sin(math.radians(beta_2[2])) * 2 *
-                    math.pi * self.r_tip[stage][3] / df[stage]['PK.ZЛ']
-                ]
+                        math.sin(math.radians(beta_2[2])) * 2 *
+                        math.pi * self.r_tip[stage][3] / df[stage]['PK.ZЛ']
+                    ]
+                elif profile_law == 1:
+                    pass
+                else:
+                    pass
 
-        elif law == 2:
+        elif twist_law == 2:
             pass
 
         alfa_ab = {}
@@ -502,14 +551,19 @@ class Profiling:
         )
         angles_throat = angles_throat.append(pd.DataFrame(beta_ab, index=index))
 
-        arrays = [
-            ['S1_THROAT_WIDTH', 'S2_THROAT_WIDTH', 'S3_THROAT_WIDTH'] * 2,
-            ['gv'] * 3 + ['rb'] * 3
-        ]
-        index = pd.MultiIndex.from_tuples(
-            list(zip(*arrays)), names=self.names
-        )
-        angles_throat = angles_throat.append(pd.DataFrame(self.throat_width, index=index))
+        if profile_law == 0:
+            arrays = [
+                ['S1_THROAT_WIDTH', 'S2_THROAT_WIDTH', 'S3_THROAT_WIDTH'] * 2,
+                ['gv'] * 3 + ['rb'] * 3
+            ]
+            index = pd.MultiIndex.from_tuples(
+                list(zip(*arrays)), names=self.names
+            )
+            angles_throat = angles_throat.append(pd.DataFrame(self.throat_width, index=index))
+        elif profile_law == 1:
+            pass
+        else:
+            pass
 
         return angles_throat
 

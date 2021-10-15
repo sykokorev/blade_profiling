@@ -2,9 +2,7 @@
 
 import os
 
-
 import profiling_class as profiler
-
 
 if __name__ == "__main__":
     root_dir = os.getcwd()
@@ -17,10 +15,15 @@ if __name__ == "__main__":
         'ГAMMA', 'TETA'
     ])
 
-    # AutoBlade parameters
-    twist_law = 1
+    # Laws
+    laws = {
+        'stacking_law': 0,      # 0 - Center of gravity; 1 - LE, 2 - TE
+        'surface_setup': 1,     # 0 - Conical, 1 - Cylindrical
+        'twist_law': 0,         # 0 - Constant circulation, 1 - Constant reactivity
+        'profile_law': 0        # 0 - Throat base, 1 - Legacy
+    }
 
-    throat_base_additional_args = {
+    additional_args = {
         'S1_SPAN': 0,
         'S2_SPAN': 0.5,
         'S3_SPAN': 1,
@@ -36,30 +39,30 @@ if __name__ == "__main__":
         # 'S1_TE_WEDGE_ANGLE': 6.5,
         # 'S2_TE_WEDGE_ANGLE': 6.5,
         # 'S3_TE_WEDGE_ANGLE': 6.5,
-        'S1_TPS_1': 0.06,
-        'S1_TPS_2': 0.05,
-        'S1_TPS_3': 0.01,
-        'S1_TPS_4': -0.05,
-        'S1_TSS_1': 0.07,
-        'S1_TSS_2': 0.1,
-        'S1_TSS_3': 0.18,
-        'S1_TSS_4': 0.35,
-        'S2_TPS_1': 0.06,
-        'S2_TPS_2': 0.05,
-        'S2_TPS_3': 0.01,
-        'S2_TPS_4': -0.05,
-        'S2_TSS_1': 0.07,
-        'S2_TSS_2': 0.1,
-        'S2_TSS_3': 0.18,
-        'S2_TSS_4': 0.35,
-        'S3_TPS_1': 0.06,
-        'S3_TPS_2': 0.05,
-        'S3_TPS_3': 0.01,
-        'S3_TPS_4': -0.05,
-        'S3_TSS_1': 0.07,
-        'S3_TSS_2': 0.1,
-        'S3_TSS_3': 0.18,
-        'S3_TSS_4': 0.35,
+        # 'S1_TPS_1': 0.06,
+        # 'S1_TPS_2': 0.05,
+        # 'S1_TPS_3': 0.01,
+        # 'S1_TPS_4': -0.05,
+        # 'S1_TSS_1': 0.07,
+        # 'S1_TSS_2': 0.1,
+        # 'S1_TSS_3': 0.18,
+        # 'S1_TSS_4': 0.35,
+        # 'S2_TPS_1': 0.06,
+        # 'S2_TPS_2': 0.05,
+        # 'S2_TPS_3': 0.01,
+        # 'S2_TPS_4': -0.05,
+        # 'S2_TSS_1': 0.07,
+        # 'S2_TSS_2': 0.1,
+        # 'S2_TSS_3': 0.18,
+        # 'S2_TSS_4': 0.35,
+        # 'S3_TPS_1': 0.06,
+        # 'S3_TPS_2': 0.05,
+        # 'S3_TPS_3': 0.01,
+        # 'S3_TPS_4': -0.05,
+        # 'S3_TSS_1': 0.07,
+        # 'S3_TSS_2': 0.1,
+        # 'S3_TSS_3': 0.18,
+        # 'S3_TSS_4': 0.35,
         'LEAN_BETA': 0,
         'BLADE_ROTATION': 0
     }
@@ -68,8 +71,9 @@ if __name__ == "__main__":
     profiler = profiler.Profiling(
         input_file,
         geometrical_parameters,
-        rs_name
+        rs_name,
+        **laws
     )
     profiler.get_data()
     profiler.save_curve_files()
-    profiler.generate_param_file(**throat_base_additional_args)
+    profiler.generate_param_file(**additional_args)
