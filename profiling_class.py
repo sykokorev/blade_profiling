@@ -68,6 +68,7 @@ class Profiling:
         self.hub = {}
         self.tip = {}
         self.z = {}
+        self.ref_trace = {}
         self.r_tip = {}
         self.r_hub = {}
         self.beta = {}
@@ -180,11 +181,11 @@ class Profiling:
 
             if stage > 1:
                 z0 += (df[stage]['CA.L'] * 1000 * math.sin(math.radians(df[stage]['CA.ГAMMA']))
-                      + dz[stage][0] + df[stage]['PK.L'] * 1000 *
-                      math.sin(math.radians(df[stage]['PK.ГAMMA'])) + dz[stage][1])
+                       + dz[stage][0] + df[stage]['PK.L'] * 1000 *
+                       math.sin(math.radians(df[stage]['PK.ГAMMA'])) + dz[stage][1])
 
             throat_gv = (0.5 * df[stage]['CA.A/T'] * df[stage]['CA.T'] * 1000 *
-                        math.cos(math.radians(df[stage]['AL1'])))
+                         math.cos(math.radians(df[stage]['AL1'])))
             throat_rb = 0.5 * df[stage]['PK.A/T'] * df[stage]['PK.T'] * \
                         math.cos(math.radians(df[stage]['BE2']))
 
@@ -204,7 +205,9 @@ class Profiling:
             d_throat_hub[stage].append((df[stage]['Init.D2'] - df[stage]['PK.HЛ']) * 1000)
 
             self.z[stage] = tuple([z0, z1, z2, z3])
-            zth[stage] = tuple([z0-z0*0.1, z1+z1*0.1, z2-z2*0.1, z3+z3*0.1])
+            zth[stage] = tuple([
+                -5.0 if stage == 1 else z0 - z0 * 0.1,
+                z1 + z1 * 0.1, z2 - z2 * 0.1, z3 + z3 * 0.1])
             r_tip[stage] = tuple([
                 self.line_equation(
                     d_throat_tip[stage][0] / 2,
@@ -300,7 +303,7 @@ class Profiling:
             self.tip[stage] = zip(z_coordinates[stage], d_tip[stage])
             self.hub[stage] = zip(z_coordinates[stage], d_hub[stage])
             if surface_setup == 0:
-                ref_trace[stage] = tuple([
+                self.ref_trace[stage] = tuple([
                     self.z[stage][0], self.z[stage][0],
                     self.r_tip[stage][0],
                     self.r_hub[stage][0],
@@ -317,11 +320,19 @@ class Profiling:
                                      self.z[stage][3], self.r_hub[stage][3]),
                 ])
             elif surface_setup == 1:
-                ref_trace[stage] = tuple([
-                    self.r_tip[stage][0],
-                    self.r_hub[stage][0],
-                    self.r_tip[stage][2],
-                    self.r_hub[stage][2]
+                self.ref_trace[stage] = tuple([
+                    self.z[stage][0], self.z[stage][0],
+                    self.r_tip[stage][0] if self.r_tip[stage][0] > self.r_tip[stage][1]
+                    else self.r_tip[stage][1],
+                    self.r_hub[stage][0] if self.r_hub[stage][0] < self.r_hub[stage][1]
+                    else self.r_hub[stage][1],
+                    0, 0,
+                    self.z[stage][2], self.z[stage][2],
+                    self.r_tip[stage][2] if self.r_tip[stage][2] > self.r_tip[stage][3]
+                    else self.r_tip[stage][3],
+                    self.r_hub[stage][2] if self.r_hub[stage][2] < self.r_hub[stage][3]
+                    else self.r_hub[stage][3],
+                    0, 0
                 ])
             else:
                 pass
@@ -356,7 +367,7 @@ class Profiling:
             )
 
         arrays = [
-            ['HUB_R1', 'HUB_R2']*2,
+            ['HUB_R1', 'HUB_R2'] * 2,
             ['gv', 'gv', 'rb', 'rb']
         ]
         index = pd.MultiIndex.from_tuples(
@@ -365,7 +376,7 @@ class Profiling:
         coordinates = pd.DataFrame(r_hub, index=index)
 
         arrays = [
-            ['SHROUD_R1', 'SHROUD_R2']*2,
+            ['SHROUD_R1', 'SHROUD_R2'] * 2,
             ['gv', 'gv', 'rb', 'rb']
         ]
         index = pd.MultiIndex.from_tuples(
@@ -374,7 +385,7 @@ class Profiling:
         coordinates = coordinates.append(pd.DataFrame(r_tip, index=index))
 
         arrays = [
-            ['HUB_Z1', 'HUB_Z2']*2,
+            ['HUB_Z1', 'HUB_Z2'] * 2,
             ['gv', 'gv', 'rb', 'rb']
         ]
         index = pd.MultiIndex.from_tuples(
@@ -383,7 +394,7 @@ class Profiling:
         coordinates = coordinates.append(pd.DataFrame(zth, index=index))
 
         arrays = [
-            ['SHROUD_Z1', 'SHROUD_Z2']*2,
+            ['SHROUD_Z1', 'SHROUD_Z2'] * 2,
             ['gv', 'gv', 'rb', 'rb']
         ]
         index = pd.MultiIndex.from_tuples(
@@ -391,30 +402,30 @@ class Profiling:
         )
         coordinates = coordinates.append(pd.DataFrame(zth, index=index))
 
-        if surface_setup == 0:
-            arrays = [
-                ['REF_TRACE_TIP_Z', 'REF_TRACE_HUB_Z',
-                 'REF_TRACE_TIP_R', 'REF_TRACE_HUB_R',
-                 'REF_TRACE_TIP_ALPHA', 'REF_TRACE_HUB_ALPHA'] * 2,
-                ['gv']*6 + ['rb']*6
-            ]
-            index = pd.MultiIndex.from_tuples(
-                list(zip(*arrays)), names=self.names
-            )
-            coordinates = coordinates.append(pd.DataFrame(ref_trace, index=index))
-        elif surface_setup == 1:
-            arrays = [
-                ['REF_TRACE_TIP_R', 'REF_TRACE_HUB_R']*2,
-                ['gv'] * 2 + ['rb'] * 2
-            ]
-            index = pd.MultiIndex.from_tuples(
-                list(zip(*arrays)), names=self.names
-            )
-            coordinates = coordinates.append(pd.DataFrame(ref_trace, index=index))
+        # if surface_setup == 0:
+        arrays = [
+            ['REF_TRACE_TIP_Z', 'REF_TRACE_HUB_Z',
+             'REF_TRACE_TIP_R', 'REF_TRACE_HUB_R',
+             'REF_TRACE_TIP_ALPHA', 'REF_TRACE_HUB_ALPHA'] * 2,
+            ['gv'] * 6 + ['rb'] * 6
+        ]
+        index = pd.MultiIndex.from_tuples(
+            list(zip(*arrays)), names=self.names
+        )
+        coordinates = coordinates.append(pd.DataFrame(self.ref_trace, index=index))
+        # elif surface_setup == 1:
+        #     arrays = [
+        #         ['REF_TRACE_TIP_R', 'REF_TRACE_HUB_R']*2,
+        #         ['gv'] * 2 + ['rb'] * 2
+        #     ]
+        #     index = pd.MultiIndex.from_tuples(
+        #         list(zip(*arrays)), names=self.names
+        #     )
+        #     coordinates = coordinates.append(pd.DataFrame(self.ref_trace, index=index))
 
         arrays = [
-            ['Z_STACKING_SWEEP', 'SWEEP_BETA']*2,
-            ['gv']*2 + ['rb']*2
+            ['Z_STACKING_SWEEP', 'SWEEP_BETA'] * 2,
+            ['gv'] * 2 + ['rb'] * 2
         ]
         index = pd.MultiIndex.from_tuples(
             list(zip(*arrays)), names=self.names
@@ -422,8 +433,8 @@ class Profiling:
         coordinates = coordinates.append(pd.DataFrame(sweep, index=index))
 
         arrays = [
-            ['S1_DZ_PRIM', 'S2_DZ_PRIM', 'S3_DZ_PRIM']*2,
-            ['gv']*3 + ['rb']*3
+            ['S1_DZ_PRIM', 'S2_DZ_PRIM', 'S3_DZ_PRIM'] * 2,
+            ['gv'] * 3 + ['rb'] * 3
         ]
 
         index = pd.MultiIndex.from_tuples(
@@ -448,82 +459,158 @@ class Profiling:
 
         df = pd.DataFrame(self._data_formation())
 
-        if twist_law == 0:
-            for stage in list(range(1, self.stages_num + 1)):
-                # Alfa GV
-                # alfa_0/1[0] - hub, alfa_0/1[1] - mid, alfa_0/1[2] - shroud
-                alfa_0_mid = math.radians(df[stage]['AL0'])
-                alfa_1_mid = math.radians(df[stage]['AL1'])
-                r_mid_gv = (self.r_tip[stage][1] + self.r_hub[stage][1]) / 2
+        alfa_2 = {}
+        for stage in list(range(1, self.stages_num + 1)):
 
+            alfa2_mid = float(df[stage]['AL2'])
+            alfa1_mid = float(df[stage]['AL1'])
+            alfa0_mid = float(df[stage]['AL0'])
+            h0_tot = df[stage]['HAД'] * 9.80665  # J/kg
+            hu = df[stage]['LU'] * 9.80665  # J/kg
+            ro_mid = df[stage]['PO']
+            ro_hub = df[stage]['POK']
+            phi = df[stage]['FИ']
+            u1_mid = df[stage]['V1']
+
+            # [s0, s1, s2, s3]
+            # [hub, mid, shroud]
+            r_mid = [
+                ((self.r_tip[stage][0] + self.r_hub[stage][0]) / 2) / 1000,
+                ((self.r_tip[stage][1] + self.r_hub[stage][1]) / 2) / 1000,
+                ((self.r_tip[stage][2] + self.r_hub[stage][2]) / 2) / 1000,
+                ((self.r_tip[stage][3] + self.r_hub[stage][3]) / 2) / 1000
+            ]
+            omega = u1_mid / r_mid[2]
+
+            if twist_law == 0:
                 alfa_1 = [
-                    math.degrees(alfa_1_mid * (self.r_hub[stage][1] / r_mid_gv)),
-                    math.degrees(alfa_1_mid),
-                    math.degrees(alfa_1_mid * (self.r_tip[stage][1] / r_mid_gv))
+                    math.degrees(math.atan(((self.r_hub[stage][1] / 1000) / r_mid[1]) *
+                                           math.tan(math.radians(alfa1_mid)))),
+                    alfa1_mid,
+                    math.degrees(math.atan(((self.r_tip[stage][1] / 1000) / r_mid[1]) *
+                                           math.tan(math.radians(alfa1_mid))))
                 ]
+                ro = [
+                    ro_hub,
+                    ro_mid,
+                    1 - (1 - ro_mid) * (r_mid[1] / (self.r_tip[stage][1] / 1000)) ** 2,
+                ]
+                h01 = [h0_tot * (1 - ro_i) for ro_i in ro]
+                c1 = [phi * (2 * h01_i) ** 0.5 for h01_i in h01]
+                c1z = c1[1] * math.sin(math.radians(alfa1_mid))
+                c1u = [a[0] * math.cos(math.radians(a[1])) for a in zip(c1, alfa_1)]
+                u1 = [
+                    u1_mid * ((self.r_hub[stage][2] / 1000) / r_mid[2]),
+                    u1_mid,
+                    u1_mid * ((self.r_tip[stage][2] / 1000) / r_mid[2])
+                ]
+                u2 = [
+                    omega * self.r_hub[stage][3] / 1000,
+                    omega * r_mid[3],
+                    omega * self.r_tip[stage][3] / 1000
+                ]
+
+                beta_1 = [math.degrees(math.atan(c1z / (a[0] - a[1]))) for a in zip(c1u, u1)]
+                beta_1 = [beta_1_i if beta_1_i > 0 else beta_1_i + 180 for beta_1_i in beta_1]
+                c2u = [(hu - (a[0] * a[1])) / a[2] for a in zip(u1, c1u, u2)]
+                c2z = c2u[1] * math.tan(math.radians(alfa2_mid))
+                beta_2 = [math.degrees(math.atan(c2z / (a[0] + a[1]))) for a in zip(c2u, u2)]
+                alfa_2[stage] = [math.degrees(math.atan(c2z / c2u_i)) for c2u_i in c2u]
 
                 if stage == 1:
-                    alfa_0 = [float(90), float(90), float(90)]
+                    alfa_0 = [alfa0_mid] * 3
                 else:
-                    alfa_0 = [
-                        math.degrees(alfa_0_mid * (self.r_hub[stage][1] / r_mid_gv)),
-                        math.degrees(alfa_0_mid),
-                        math.degrees(alfa_0_mid * (self.r_tip[stage][1] / r_mid_gv)),
-                    ]
+                    alfa_0 = alfa_2[stage - 1]
 
+                self.beta[stage] = beta_1 + beta_2
                 self.alfa[stage] = alfa_0 + alfa_1
 
-                # Beta RB
-                # beta_1/2[0] - hub, beta_1/2[1] - mid, beta_1/2[2] - shroud
-                beta_1 = [
-                    df[stage]['BE1K'],
-                    df[stage]['BE1'],
-                    df[stage]['BE1П']
+            elif twist_law == 1:
+                n = (math.cos(math.radians(alfa1_mid))) ** 2
+                # [hub, mid, shroud]
+                ro = [
+                    ro_hub,
+                    ro_mid,
+                    1 - (1 - ro_mid) * (r_mid[1] / (self.r_tip[stage][1] / 1000)) ** n,
                 ]
-                beta_2_mid = math.radians(df[stage]['BE2'])
-                r_mid_rb = (self.r_tip[stage][3] + self.r_hub[stage][3]) / 2
-                beta_2 = [
-                    math.degrees(math.tan(beta_2_mid) * (r_mid_rb / self.r_hub[stage][3])),
-                    math.degrees(beta_2_mid),
-                    math.degrees(math.tan(beta_2_mid) * (r_mid_rb / self.r_tip[stage][3]))
+                h01 = [h0_tot * (1 - ro_i) for ro_i in ro]
+                c1 = [phi * (2 * h01_i) ** 0.5 for h01_i in h01]
+                c1z = [c1_i * math.sin(math.radians(alfa1_mid)) for c1_i in c1]
+                c1u = [c1_i * math.cos(math.radians(alfa1_mid)) for c1_i in c1]
+
+                u1 = [
+                    u1_mid * (self.r_hub[stage][2] / 1000) / r_mid[2],
+                    u1_mid,
+                    u1_mid * (self.r_tip[stage][2] / 1000) / r_mid[2]
                 ]
-                self.beta[stage] = beta_1 + beta_2
+                u2 = [
+                    omega * self.r_hub[stage][3] / 1000,
+                    omega * r_mid[3],
+                    omega * self.r_tip[stage][3] / 1000
+                ]
+                beta_1 = [math.degrees(math.atan(a[0] / (a[1] - a[2]))) for a in zip(c1z, c1u, u1)]
+                beta_1 = [beta_1_i if beta_1_i > 0 else beta_1_i + 180 for beta_1_i in beta_1]
+                alfa_1 = [alfa1_mid] * 3
 
-                if profile_law == 0:
-                    # Throat width
-                    # throat_width[stage][GV(hub, mid, tip), RB(hub, mid, tip)]
-                    self.throat_width[stage] = [
-                        math.sin(math.radians(alfa_1[0])) * 2 *
-                        math.pi * self.r_hub[stage][1] / df[stage]['CA.ZЛ'],
+                c2u = [(hu - a[0] * a[1]) / a[2] for a in zip(u1, c1u, u2)]
+                c2_mid = c2u[1] / math.cos(math.radians(alfa2_mid))
+                n1 = (n - 1) / n
+                n2 = 2 * n
+                n3 = 1 / n
+                n4 = (n - 1) / (n + 1)
+                n5 = 2 / (n + 1)
+                n6 = n + 1
+                r1 = r_mid[3] / (self.r_hub[stage][3] / 1000)
+                r2 = r_mid[3] / (self.r_tip[stage][3] / 1000)
+                dc = (c1u[1] - c2u[1])
+                c2z = [
+                    (c2_mid ** 2 - (c1u[1] ** 2) * (n1 * r1 ** n2 + n3) +
+                     2 * c1u[1] * dc * (n4 * r1 ** n6 + n5) - dc ** 2) ** 0.5,
+                    (c2_mid ** 2 - c2u[1] ** 2) ** 0.5,
+                    (c2_mid ** 2 - (c1u[1] ** 2) * (n1 * r2 ** n2 + n3) +
+                     2 * c1u[1] * dc * (n4 * r2 ** n6 + n5) - dc ** 2) ** 0.5
+                ]
+                beta_2 = [math.degrees(math.atan(a[0] / (math.fabs(a[1]) + a[2]))) for a in zip(c2z, c2u, u2)]
+                alfa_2[stage] = [math.degrees(math.atan(a[0] / math.fabs(a[1]))) for a in zip(c2z, c2u)]
 
-                        # math.sin(math.radians(alfa_1[1])) * 2 *
-                        # math.pi * r_mid_gv / df[stage]['CA.ZЛ'],
-                        math.sin(math.radians(alfa_1[1])) * 2 *
-                        math.pi * r_mid_gv / df[stage]['CA.ZЛ'],
-
-                        math.sin(math.radians(alfa_1[2])) * 2 *
-                        math.pi * self.r_tip[stage][1] / df[stage]['CA.ZЛ'],
-
-                        math.sin(math.radians(beta_2[0])) * 2 *
-                        math.pi * self.r_hub[stage][3] / df[stage]['PK.ZЛ'],
-
-                        math.sin(math.radians(beta_2[1])) * 2 *
-                        math.pi * r_mid_rb / df[stage]['PK.ZЛ'],
-
-                        math.sin(math.radians(beta_2[2])) * 2 *
-                        math.pi * self.r_tip[stage][3] / df[stage]['PK.ZЛ']
-                    ]
-                elif profile_law == 1:
-                    pass
+                if stage == 1:
+                    alfa_0 = [alfa0_mid] * 3
                 else:
-                    pass
+                    alfa_0 = alfa_2[stage - 1]
 
-        elif twist_law == 2:
-            pass
+                self.beta[stage] = beta_1 + beta_2
+                self.alfa[stage] = alfa_0 + alfa_1
+
+            if profile_law == 0:
+                # Throat width
+                # throat_width[stage][GV(hub, mid, tip), RB(hub, mid, tip)]
+                self.throat_width[stage] = [
+                    math.sin(math.radians(alfa_1[0])) * 2 *
+                    math.pi * self.r_hub[stage][1] / df[stage]['CA.ZЛ'],
+
+                    math.sin(math.radians(alfa_1[1])) * 2 *
+                    math.pi * r_mid[1] / df[stage]['CA.ZЛ'],
+
+                    math.sin(math.radians(alfa_1[2])) * 2 *
+                    math.pi * self.r_tip[stage][1] / df[stage]['CA.ZЛ'],
+
+                    math.sin(math.radians(beta_2[0])) * 2 *
+                    math.pi * self.r_hub[stage][3] / df[stage]['PK.ZЛ'],
+
+                    math.sin(math.radians(beta_2[1])) * 2 *
+                    math.pi * r_mid[3] / df[stage]['PK.ZЛ'],
+
+                    math.sin(math.radians(beta_2[2])) * 2 *
+                    math.pi * self.r_tip[stage][3] / df[stage]['PK.ZЛ']
+                ]
+            elif profile_law == 1:
+                pass
+            else:
+                pass
 
         alfa_ab = {}
         for stage in self.alfa.keys():
-            alfa_ab[stage] = [(x - 90) for x in self.alfa[stage][:3]]
+            alfa_ab[stage] = [(90 - x) for x in self.alfa[stage][:3]]
             alfa_ab[stage] += [(90 - x) for x in self.alfa[stage][3:]]
 
         beta_ab = {}
@@ -620,8 +707,8 @@ class Profiling:
         gamma_df = pd.DataFrame(gamma, index=index)
 
         arrays = [
-            ['S1_LE_RADIUS', 'S2_LE_RADIUS', 'S3_LE_RADIUS']*2,
-            ['gv']*3 + ['rb']*3
+            ['S1_LE_RADIUS', 'S2_LE_RADIUS', 'S3_LE_RADIUS'] * 2,
+            ['gv'] * 3 + ['rb'] * 3
         ]
         index = pd.MultiIndex.from_tuples(
             list(zip(*arrays)), names=self.names

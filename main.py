@@ -12,14 +12,15 @@ if __name__ == "__main__":
     geometrical_parameters = tuple([
         'AL0', 'AL1', 'AL2', 'BE2', 'BE1K', 'BE1П', 'BE1',
         'HЛ', 'T', 'A/T', 'D1', 'D2', 'B', 'A/T', 'ZЛ', 'L',
-        'ГAMMA', 'TETA'
+        'ГAMMA', 'TETA', 'HAД', 'PO', 'POK', 'FИ', 'V1', 'LU',
+        'AL2'
     ])
 
     # Laws
     laws = {
         'stacking_law': 0,      # 0 - Center of gravity; 1 - LE, 2 - TE
         'surface_setup': 1,     # 0 - Conical, 1 - Cylindrical
-        'twist_law': 0,         # 0 - Constant circulation, 1 - Constant reactivity
+        'twist_law': 1,         # 0 - Constant circulation, 1 - Constant alfa1
         'profile_law': 0        # 0 - Throat base, 1 - Legacy
     }
 
@@ -27,42 +28,6 @@ if __name__ == "__main__":
         'S1_SPAN': 0,
         'S2_SPAN': 0.5,
         'S3_SPAN': 1,
-        # 'S1_SS_LE_HALF_WEDGE_ANGLE': 4.5,
-        # 'S2_SS_LE_HALF_WEDGE_ANGLE': 4.5,
-        # 'S3_SS_LE_HALF_WEDGE_ANGLE': 4.5,
-        # 'S1_PS_LE_HALF_WEDGE_ANGLE': 4.5,
-        # 'S2_PS_LE_HALF_WEDGE_ANGLE': 4.5,
-        # 'S3_PS_LE_HALF_WEDGE_ANGLE': 4.5,
-        # 'S1_DEV_ANGLE': 11,
-        # 'S2_DEV_ANGLE': 11,
-        # 'S3_DEV_ANGLE': 11,
-        # 'S1_TE_WEDGE_ANGLE': 6.5,
-        # 'S2_TE_WEDGE_ANGLE': 6.5,
-        # 'S3_TE_WEDGE_ANGLE': 6.5,
-        # 'S1_TPS_1': 0.06,
-        # 'S1_TPS_2': 0.05,
-        # 'S1_TPS_3': 0.01,
-        # 'S1_TPS_4': -0.05,
-        # 'S1_TSS_1': 0.07,
-        # 'S1_TSS_2': 0.1,
-        # 'S1_TSS_3': 0.18,
-        # 'S1_TSS_4': 0.35,
-        # 'S2_TPS_1': 0.06,
-        # 'S2_TPS_2': 0.05,
-        # 'S2_TPS_3': 0.01,
-        # 'S2_TPS_4': -0.05,
-        # 'S2_TSS_1': 0.07,
-        # 'S2_TSS_2': 0.1,
-        # 'S2_TSS_3': 0.18,
-        # 'S2_TSS_4': 0.35,
-        # 'S3_TPS_1': 0.06,
-        # 'S3_TPS_2': 0.05,
-        # 'S3_TPS_3': 0.01,
-        # 'S3_TPS_4': -0.05,
-        # 'S3_TSS_1': 0.07,
-        # 'S3_TSS_2': 0.1,
-        # 'S3_TSS_3': 0.18,
-        # 'S3_TSS_4': 0.35,
         'LEAN_BETA': 0,
         'BLADE_ROTATION': 0
     }
