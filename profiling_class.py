@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import pip
 import os
-
 import pandas as pd
 import itertools
 import math
@@ -15,13 +14,6 @@ from common_class import CommonClass
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_colwidth', None)
-
-
-def install(package):
-    if hasattr(pip, 'main'):
-        pip.main(['install', package])
-    else:
-        pip._internal.main(['install', package])
 
 
 def _dict_unpack(d, parent_key, sep):
@@ -57,16 +49,18 @@ def get_unique_keys(*args):
 
 class Profiling:
 
-    def __init__(self, in_file=None, parameters=None, rs_name=None, **laws):
+    def __init__(self, in_file=None, root_dir=os.getcwd(), parameters=None, rs_name=None, coef=1, **laws):
 
         self.dir_handle = CommonClass()
-        self.root_dir = os.getcwd()
+        self.root_dir = root_dir
         self.names = ['param', 'rs']
         self.in_file = in_file
         self.parameters = parameters
         self.rs_name = rs_name
+        self.coef = coef
         self.hub = {}
         self.tip = {}
+        self.b1 = {}
         self.z = {}
         self.ref_trace = {}
         self.r_tip = {}
@@ -89,6 +83,17 @@ class Profiling:
     def slope_angle(x1, y1, x2, y2):
         slope = math.degrees(math.atan((y2 - y1) / (x2 - x1)))
         return slope
+
+    @staticmethod
+    def get_conicity(d_rel, temperature):
+        if temperature > 473.15:
+            a, b = 0.0847, 0.2202
+        else:
+            a, b = 0.0918, -0.01#-0.0513
+        conicity = a * d_rel + b
+        if conicity > 1:
+            conicity = 1
+        return conicity
 
     def get_data(self):
         self.stages_num = Pr.number_of_stages(self.data_frame)
@@ -146,13 +151,21 @@ class Profiling:
         # 2 - Trailing edge
         # in any other case - Trailing edge
 
+        stacking_point = {
+            0: 'GRAVITY_CENTER',
+            1: 'LEADING_EDGE',
+            2: 'TRAILING_EDGE'
+        }
+        stack = {}
+
         df = pd.DataFrame(self._data_formation())
+
         d_throat_tip = {}
         d_throat_hub = {}
         z0 = 0
         dz = {}
         z_coordinates = {}
-        b1 = {}
+        b_ax = {}
 
         zth = {}
         r_tip = {}
@@ -160,11 +173,20 @@ class Profiling:
 
         d_tip = {}
         d_hub = {}
-        ref_trace = {}
         sweep = {}
 
         for stage in list(range(1, self.stages_num + 1)):
 
+            conicity = self.get_conicity(
+                df[stage]['Init.D2'] / df[stage]['PK.HЛ'],
+                df[stage]['T2*']
+            )
+            b_mid = df[stage]['PK.L'] * self.coef * math.cos(math.radians(df[stage]['CA.ГAMMA']))
+            b_ax[stage] = (
+                2 * b_mid / (1 + conicity),
+                b_mid,
+                conicity * 2 * b_mid / (1 + conicity)
+            )
             d_tip[stage] = []
             d_hub[stage] = []
             d_throat_tip[stage] = []
@@ -173,41 +195,43 @@ class Profiling:
             self.z[stage] = []
 
             dz[stage] = [
-                dz_ * df[stage]['CA.T'] * 1000 *
+                dz_ * df[stage]['CA.T'] * self.coef *
                 math.tan(math.radians(df[stage]['AL1'])),
-                dz_ * df[stage]['PK.T'] * 1000 *
+                dz_ * df[stage]['PK.T'] * self.coef *
                 math.tan(math.radians(df[stage]['BE2']))
             ]
 
             if stage > 1:
-                z0 += (df[stage]['CA.L'] * 1000 * math.sin(math.radians(df[stage]['CA.ГAMMA']))
-                       + dz[stage][0] + df[stage]['PK.L'] * 1000 *
-                       math.sin(math.radians(df[stage]['PK.ГAMMA'])) + dz[stage][1])
+                z0 += (df[stage]['CA.L'] * self.coef * math.cos(math.radians(df[stage]['CA.ГAMMA']))
+                       + dz[stage][0] + df[stage]['PK.L'] * self.coef *
+                       math.cos(math.radians(df[stage]['PK.ГAMMA'])) + dz[stage][1])
 
-            throat_gv = (0.5 * df[stage]['CA.A/T'] * df[stage]['CA.T'] * 1000 *
+            throat_gv = (0.5 * df[stage]['CA.A/T'] * df[stage]['CA.T'] * self.coef *
                          math.cos(math.radians(df[stage]['AL1'])))
             throat_rb = 0.5 * df[stage]['PK.A/T'] * df[stage]['PK.T'] * \
                         math.cos(math.radians(df[stage]['BE2']))
 
-            z_throat_gv = z0 + df[stage]['CA.L'] * 1000 * \
+            z_throat_gv = z0 + df[stage]['CA.L'] * self.coef * \
                           math.sin(math.radians(df[stage]['CA.ГAMMA'])) - throat_gv
-            z1 = z0 + df[stage]['CA.L'] * 1000 * math.sin(math.radians(df[stage]['CA.ГAMMA']))
+            z1 = z0 + df[stage]['CA.L'] * self.coef * math.sin(math.radians(df[stage]['CA.ГAMMA']))
             z2 = z1 + dz[stage][0]
-            z_throat_rb = z2 + df[stage]['PK.L'] * 1000 * \
+            z_throat_rb = z2 + df[stage]['PK.L'] * self.coef * \
                           math.sin(math.radians(df[stage]['PK.ГAMMA'])) - throat_rb
-            z3 = z2 + df[stage]['PK.L'] * 1000 * math.sin(math.radians(df[stage]['PK.ГAMMA']))
+            z3 = z2 + df[stage]['PK.L'] * self.coef * math.sin(math.radians(df[stage]['PK.ГAMMA']))
 
             z_coordinates[stage] = [z0, z_throat_gv, z1, z2, z_throat_rb, z3]
 
-            d_throat_tip[stage].append((df[stage]['Init.D1'] + df[stage]['CA.HЛ']) * 1000)
-            d_throat_tip[stage].append((df[stage]['Init.D2'] + df[stage]['PK.HЛ']) * 1000)
-            d_throat_hub[stage].append((df[stage]['Init.D1'] - df[stage]['CA.HЛ']) * 1000)
-            d_throat_hub[stage].append((df[stage]['Init.D2'] - df[stage]['PK.HЛ']) * 1000)
+            d_throat_tip[stage].append((df[stage]['Init.D1'] + df[stage]['CA.HЛ']) * self.coef)
+            d_throat_tip[stage].append((df[stage]['Init.D2'] + df[stage]['PK.HЛ']) * self.coef)
+            d_throat_hub[stage].append((df[stage]['Init.D1'] - df[stage]['CA.HЛ']) * self.coef)
+            d_throat_hub[stage].append((df[stage]['Init.D2'] - df[stage]['PK.HЛ']) * self.coef)
 
             self.z[stage] = tuple([z0, z1, z2, z3])
+
             zth[stage] = tuple([
-                -5.0 if stage == 1 else z0 - z0 * 0.1,
+                -0.005 if stage == 1 else z0 - z0 * 0.1,
                 z1 + z1 * 0.1, z2 - z2 * 0.1, z3 + z3 * 0.1])
+
             r_tip[stage] = tuple([
                 self.line_equation(
                     d_throat_tip[stage][0] / 2,
@@ -336,34 +360,37 @@ class Profiling:
                 ])
             else:
                 pass
-            if stacking_law == 0:
-                sweep[stage] = [self.z[stage][0] + (self.z[stage][1] - self.z[stage][0]) / 2,
-                                sweep_beta,
-                                self.z[stage][2] + (self.z[stage][3] - self.z[stage][2]) / 2,
-                                sweep_beta]
-            elif stacking_law == 1:
-                sweep[stage] = [self.z[stage][0],
-                                sweep_beta,
-                                self.z[stage][2],
-                                sweep_beta]
-            elif stacking_law == 2:
-                sweep[stage] = [self.z[stage][1],
-                                sweep_beta,
-                                self.z[stage][3],
-                                sweep_beta]
-            else:
-                sweep[stage] = [self.z[stage][1],
-                                sweep_beta,
-                                self.z[stage][3],
-                                sweep_beta]
 
-            b1[stage] = (
+            stack[stage] = [
+                stacking_point[stacking_law[0]],
+                stacking_point[stacking_law[1]]
+            ]
+            if stacking_law[0] == 0:
+                sweep[stage] = [self.z[stage][0] + (self.z[stage][1] - self.z[stage][0]) / 2,
+                                sweep_beta]
+            elif stacking_law[0] == 1:
+                sweep[stage] = [self.z[stage][0], sweep_beta]
+            elif stacking_law[0] == 2:
+                sweep[stage] = [self.z[stage][1], sweep_beta]
+
+            if stacking_law[1] == 0:
+                sweep[stage].append(self.z[stage][2] + (self.z[stage][3] - self.z[stage][2]) / 2)
+                sweep[stage].append(sweep_beta)
+            elif stacking_law[1] == 1:
+                sweep[stage].append(self.z[stage][2])
+                sweep[stage].append(sweep_beta)
+            elif stacking_law[1] == 2:
+                sweep[stage].append(self.z[stage][1])
+                sweep[stage].append(sweep_beta)
+
+            self.b1[stage] = (
                 self.z[stage][1] - self.z[stage][0],
                 self.z[stage][1] - self.z[stage][0],
                 self.z[stage][1] - self.z[stage][0],
-                self.z[stage][3] - self.z[stage][2],
-                self.z[stage][3] - self.z[stage][2],
-                self.z[stage][3] - self.z[stage][2]
+                b_ax[stage][0], b_ax[stage][1], b_ax[stage][2]
+                # self.z[stage][3] - self.z[stage][2],
+                # self.z[stage][3] - self.z[stage][2],
+                # self.z[stage][3] - self.z[stage][2]
             )
 
         arrays = [
@@ -413,15 +440,6 @@ class Profiling:
             list(zip(*arrays)), names=self.names
         )
         coordinates = coordinates.append(pd.DataFrame(self.ref_trace, index=index))
-        # elif surface_setup == 1:
-        #     arrays = [
-        #         ['REF_TRACE_TIP_R', 'REF_TRACE_HUB_R']*2,
-        #         ['gv'] * 2 + ['rb'] * 2
-        #     ]
-        #     index = pd.MultiIndex.from_tuples(
-        #         list(zip(*arrays)), names=self.names
-        #     )
-        #     coordinates = coordinates.append(pd.DataFrame(self.ref_trace, index=index))
 
         arrays = [
             ['Z_STACKING_SWEEP', 'SWEEP_BETA'] * 2,
@@ -433,6 +451,14 @@ class Profiling:
         coordinates = coordinates.append(pd.DataFrame(sweep, index=index))
 
         arrays = [
+            ['STACKING_POINT'] * 2,
+            ['gv'] + ['rb']
+        ]
+        index = pd.MultiIndex.from_tuples(
+            list(zip(*arrays)), names=self.names
+        )
+        coordinates = coordinates.append(pd.DataFrame(stack, index=index))
+        arrays = [
             ['S1_DZ_PRIM', 'S2_DZ_PRIM', 'S3_DZ_PRIM'] * 2,
             ['gv'] * 3 + ['rb'] * 3
         ]
@@ -441,8 +467,9 @@ class Profiling:
             list(zip(*arrays)), names=self.names
         )
 
-        coordinates = coordinates.append(pd.DataFrame(b1, index=index))
+        coordinates = coordinates.append(pd.DataFrame(self.b1, index=index))
 
+        self.save_curve_files(z_coordinates, d_tip, d_hub)
         return coordinates
 
     def _twist_law(self, twist_law=0, profile_law=0):
@@ -475,39 +502,39 @@ class Profiling:
             # [s0, s1, s2, s3]
             # [hub, mid, shroud]
             r_mid = [
-                ((self.r_tip[stage][0] + self.r_hub[stage][0]) / 2) / 1000,
-                ((self.r_tip[stage][1] + self.r_hub[stage][1]) / 2) / 1000,
-                ((self.r_tip[stage][2] + self.r_hub[stage][2]) / 2) / 1000,
-                ((self.r_tip[stage][3] + self.r_hub[stage][3]) / 2) / 1000
+                ((self.r_tip[stage][0] + self.r_hub[stage][0]) / 2) / self.coef,
+                ((self.r_tip[stage][1] + self.r_hub[stage][1]) / 2) / self.coef,
+                ((self.r_tip[stage][2] + self.r_hub[stage][2]) / 2) / self.coef,
+                ((self.r_tip[stage][3] + self.r_hub[stage][3]) / 2) / self.coef
             ]
             omega = u1_mid / r_mid[2]
 
             if twist_law == 0:
                 alfa_1 = [
-                    math.degrees(math.atan(((self.r_hub[stage][1] / 1000) / r_mid[1]) *
+                    math.degrees(math.atan(((self.r_hub[stage][1] / self.coef) / r_mid[1]) *
                                            math.tan(math.radians(alfa1_mid)))),
                     alfa1_mid,
-                    math.degrees(math.atan(((self.r_tip[stage][1] / 1000) / r_mid[1]) *
+                    math.degrees(math.atan(((self.r_tip[stage][1] / self.coef) / r_mid[1]) *
                                            math.tan(math.radians(alfa1_mid))))
                 ]
                 ro = [
                     ro_hub,
                     ro_mid,
-                    1 - (1 - ro_mid) * (r_mid[1] / (self.r_tip[stage][1] / 1000)) ** 2,
+                    1 - (1 - ro_mid) * (r_mid[1] / (self.r_tip[stage][1] / self.coef)) ** 2,
                 ]
                 h01 = [h0_tot * (1 - ro_i) for ro_i in ro]
                 c1 = [phi * (2 * h01_i) ** 0.5 for h01_i in h01]
                 c1z = c1[1] * math.sin(math.radians(alfa1_mid))
                 c1u = [a[0] * math.cos(math.radians(a[1])) for a in zip(c1, alfa_1)]
                 u1 = [
-                    u1_mid * ((self.r_hub[stage][2] / 1000) / r_mid[2]),
+                    u1_mid * ((self.r_hub[stage][2] / self.coef) / r_mid[2]),
                     u1_mid,
-                    u1_mid * ((self.r_tip[stage][2] / 1000) / r_mid[2])
+                    u1_mid * ((self.r_tip[stage][2] / self.coef) / r_mid[2])
                 ]
                 u2 = [
-                    omega * self.r_hub[stage][3] / 1000,
+                    omega * self.r_hub[stage][3] / self.coef,
                     omega * r_mid[3],
-                    omega * self.r_tip[stage][3] / 1000
+                    omega * self.r_tip[stage][3] / self.coef
                 ]
 
                 beta_1 = [math.degrees(math.atan(c1z / (a[0] - a[1]))) for a in zip(c1u, u1)]
@@ -531,7 +558,7 @@ class Profiling:
                 ro = [
                     ro_hub,
                     ro_mid,
-                    1 - (1 - ro_mid) * (r_mid[1] / (self.r_tip[stage][1] / 1000)) ** n,
+                    1 - (1 - ro_mid) * (r_mid[1] / (self.r_tip[stage][1] / self.coef)) ** n,
                 ]
                 h01 = [h0_tot * (1 - ro_i) for ro_i in ro]
                 c1 = [phi * (2 * h01_i) ** 0.5 for h01_i in h01]
@@ -539,14 +566,14 @@ class Profiling:
                 c1u = [c1_i * math.cos(math.radians(alfa1_mid)) for c1_i in c1]
 
                 u1 = [
-                    u1_mid * (self.r_hub[stage][2] / 1000) / r_mid[2],
+                    u1_mid * (self.r_hub[stage][2] / self.coef) / r_mid[2],
                     u1_mid,
-                    u1_mid * (self.r_tip[stage][2] / 1000) / r_mid[2]
+                    u1_mid * (self.r_tip[stage][2] / self.coef) / r_mid[2]
                 ]
                 u2 = [
-                    omega * self.r_hub[stage][3] / 1000,
+                    omega * self.r_hub[stage][3] / self.coef,
                     omega * r_mid[3],
-                    omega * self.r_tip[stage][3] / 1000
+                    omega * self.r_tip[stage][3] / self.coef
                 ]
                 beta_1 = [math.degrees(math.atan(a[0] / (a[1] - a[2]))) for a in zip(c1z, c1u, u1)]
                 beta_1 = [beta_1_i if beta_1_i > 0 else beta_1_i + 180 for beta_1_i in beta_1]
@@ -560,8 +587,8 @@ class Profiling:
                 n4 = (n - 1) / (n + 1)
                 n5 = 2 / (n + 1)
                 n6 = n + 1
-                r1 = r_mid[3] / (self.r_hub[stage][3] / 1000)
-                r2 = r_mid[3] / (self.r_tip[stage][3] / 1000)
+                r1 = r_mid[3] / (self.r_hub[stage][3] / self.coef)
+                r2 = r_mid[3] / (self.r_tip[stage][3] / self.coef)
                 dc = (c1u[1] - c2u[1])
                 c2z = [
                     (c2_mid ** 2 - (c1u[1] ** 2) * (n1 * r1 ** n2 + n3) +
@@ -656,11 +683,24 @@ class Profiling:
 
     def _gamma_compute(self, ksi_rb=0.3, ksi_gv=0.3):
 
+        df = pd.DataFrame(self._data_formation())
+
         gamma = {}
         r_te = {}
         r_le = {}
-
         for stage in list(range(1, self.stages_num + 1)):
+            t_rb = [
+                2 * self.r_hub[stage][2] * math.pi / df[stage]["PK.ZЛ"],
+                df[stage]["PK.T/L"] * df[stage]["PK.L"] * self.coef,
+                2 * self.r_tip[stage][2] * math.pi / df[stage]["PK.ZЛ"]
+            ]
+
+            b_rb = [a[0] / a[1] for a in zip(t_rb, [df[stage]["PK.T/L"]]*3)]
+
+            gamma_rb = [a[0] / a[1] if a[0] / a[1] < 1 else 1
+                        for a in zip(self.b1[stage][3:], b_rb)]
+
+
             gamma[stage] = (
                 90 - (self.alfa[stage][3] + ksi_gv *
                       (180 - (self.alfa[stage][0] + self.alfa[stage][3]))),
@@ -671,15 +711,20 @@ class Profiling:
                 90 - (self.alfa[stage][5] + ksi_gv *
                       (180 - (self.alfa[stage][2] + self.alfa[stage][5]))),
 
-                self.beta[stage][3] - 90 + ksi_rb *
-                (180 - (self.beta[stage][0] + self.beta[stage][3])),
+                math.degrees(math.asin(gamma_rb[0])) - 90,
+                math.degrees(math.asin(gamma_rb[1])) - 90,
+                math.degrees(math.asin(gamma_rb[2])) - 90
 
-                self.beta[stage][4] - 90 + ksi_rb *
-                (180 - (self.beta[stage][1] + self.beta[stage][4])),
-
-                self.beta[stage][5] - 90 + ksi_rb *
-                (180 - (self.beta[stage][2] + self.beta[stage][5]))
+                # self.beta[stage][3] - 90 + ksi_rb *
+                # (180 - (self.beta[stage][0] + self.beta[stage][3])),
+                #
+                # self.beta[stage][4] - 90 + ksi_rb *
+                # (180 - (self.beta[stage][1] + self.beta[stage][4])),
+                #
+                # self.beta[stage][5] - 90 + ksi_rb *
+                # (180 - (self.beta[stage][2] + self.beta[stage][5]))
             )
+
             r_le[stage] = (
                 0.06 * (self.z[stage][1] - self.z[stage][0]) / math.cos(math.radians(gamma[stage][0])) / 2,
                 0.06 * (self.z[stage][1] - self.z[stage][0]) / math.cos(math.radians(gamma[stage][1])) / 2,
@@ -765,8 +810,6 @@ class Profiling:
         self.ab_data = self.ab_data.append(self._gamma_compute())
         self.ab_data = self.ab_data.append(self.number_of_blades())
 
-        print(self.ab_data)
-
         for stage in self.ab_data.columns:
             for each in self.ab_data[stage].groupby('rs'):
                 num_param = len(each[1]) + len(kwargs)
@@ -783,11 +826,101 @@ class Profiling:
                 with open(file_name, 'w') as f:
                     f.write(param_str)
 
-    def save_curve_files(self):
+    def generate_par_file(self, **kwargs):
+        root = os.getcwd()
+        par_dir = os.path.join(self.root_dir, 'par')
+        par_sample = os.path.join(root, 'par_samples', 'sample.par')
+        log_msg, is_created = self.dir_handle.create_dir(par_dir)
+
+        self.ab_data = self.ab_data.append(self._coordinates())
+        self.ab_data = self.ab_data.append(self._twist_law())
+        self.ab_data = self.ab_data.append(self._gamma_compute())
+        self.ab_data = self.ab_data.append(self.number_of_blades())
+
+        if is_created:
+            for stage in self.ab_data.columns:
+                for each in self.ab_data[stage].groupby('rs'):
+                    par_file = os.path.join(par_dir, f'{each[0]}{stage}.par')
+                    try:
+                        with open(par_sample, 'r') as sample:
+                            is_param_block = False
+                            param = False
+                            with open(par_file, 'w') as par:
+                                for line in sample:
+                                    words = line.split()
+                                    if len(words) == 2:
+                                        if (str(words[0]) == "NI_BEGIN" and
+                                                str(words[1]) in ["PARAMETERS", "PARAMETER", "STACKING_POINT"]):
+                                            is_param_block = True
+                                        elif (str(words[0]) == "NI_END" and
+                                                str(words[1]) in ["PARAMETERS", "PARAMETER", "STACKING_POINT"]):
+                                            is_param_block = False
+                                            param = False
+                                        elif is_param_block:
+                                            if str(words[0]) in ["NAME"]:
+                                                for k in each[1].keys():
+                                                    if k[0] in words:
+                                                        key = k[0]
+                                                        param = True
+                                            elif str(words[0]) in ["STACKING_POINT"]:
+                                                for k in each[1].keys():
+                                                    if k[0] in words:
+                                                        key = k[0]
+                                                        param = True
+                                                line = line.replace(str(words[1]), str(each[1][key][0]))
+                                            elif str(words[0]) in ["VALUE"]:
+                                                if param:
+                                                    line = line.replace(str(words[1]), str(each[1][key][0]))
+                                            elif str(words[0]) == "LIMIT_MIN":
+                                                if param:
+                                                    line = line.replace(
+                                                        str(words[1]), str(
+                                                            each[1][key][0] - each[1][key][0] * 0.1
+                                                        )
+                                                    )
+                                            elif str(words[0]) == "LIMIT_MAX":
+                                                if param:
+                                                    line = line.replace(
+                                                        str(words[1]), str(
+                                                            each[1][key][0] + each[1][key][0] * 0.1
+                                                        )
+                                                    )
+                                            elif str(words[0]) == "VALUE_MIN":
+                                                if param:
+                                                    line = line.replace(
+                                                        str(words[1]), str(
+                                                            each[1][key][0] - each[1][key][0] * 0.1
+                                                        )
+                                                    )
+                                            elif str(words[0]) == "VALUE_MAX":
+                                                if param:
+                                                    line = line.replace(
+                                                        str(words[1]), str(
+                                                            each[1][key][0] + each[1][key][0] * 0.1
+                                                        )
+                                                    )
+                                    par.write(line)
+
+                    except Exception as ex:
+                        print(ex)
+
+    def save_curve_files(self, *args):
         curves_dir = os.path.join(self.root_dir, 'curves')
         log_msg, is_created = self.dir_handle.create_dir(curves_dir)
+        z = args[0]
+        r_shroud = {key: [float(arg_i) / 2 for arg_i in arg] for key, arg in args[1].items()}
+        r_hub = {key: [float(arg_i) / 2 for arg_i in arg] for key, arg in args[2].items()}
+
         if is_created:
-            out_file_name_shroud = os.path.splitext(os.path.split(self.in_file)[1])[0] + '_shroud.dat'
-            out_file_name_hub = os.path.splitext(os.path.split(self.in_file)[1])[0] + '_hub.dat'
-            out_file_name_shroud = os.path.join(curves_dir, out_file_name_shroud)
-            out_file_name_hub = os.path.join(curves_dir, out_file_name_hub)
+            out_file_shroud = os.path.join(curves_dir, 'shroud.dat')
+            out_file_hub = os.path.join(curves_dir, 'hub.dat')
+            with open(out_file_shroud, 'w') as fsh:
+                for stage in z.keys():
+                    c = zip(z[stage], r_shroud[stage])
+                    for e in c:
+                        fsh.write(f'{e[0]},{e[1]},0\n')
+            with open(out_file_hub, 'w') as fhub:
+                for stage in z.keys():
+                    c = zip(z[stage], r_hub[stage])
+                    for e in c:
+                        fhub.write(f'{e[0]},{e[1]},0\n')

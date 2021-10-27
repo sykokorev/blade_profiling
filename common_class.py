@@ -173,12 +173,14 @@ class CommonClass:
             return False, msg
 
     @staticmethod
-    def get_data_from_file(in_file=None, first_line=0):
+    def get_data_from_file(in_file=None, first_line=0, sep=','):
         """
         :param in_file: Full file name from which data will be got
         :param first_line: First line from which data will be extracted
+        :param sep: Separator for split method
         :return: Bool, str
             True if data was obtained or False otherwise and logging message
+
         """
 
         points = []
@@ -187,7 +189,7 @@ class CommonClass:
                 with open(in_file, 'r') as f:
                     content = f.readlines()
                     for point in content[first_line:]:
-                        point = point.split()
+                        point = point.split(sep)
                         points.append(point)
                 return True, points
             except PermissionError:
