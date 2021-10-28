@@ -49,10 +49,10 @@ def get_unique_keys(*args):
 
 class Profiling:
 
-    def __init__(self, in_file=None, root_dir=os.getcwd(), parameters=None, rs_name=None, coef=1, **laws):
+    def __init__(self, in_file=None, parameters=None, rs_name=None, coef=1, **laws):
 
         self.dir_handle = CommonClass()
-        self.root_dir = root_dir
+        self.root_dir = os.getcwd()
         self.names = ['param', 'rs']
         self.in_file = in_file
         self.parameters = parameters

@@ -2,6 +2,7 @@
 import subprocess
 import sys
 import os
+import time
 
 
 if __name__ == '__main__':
@@ -13,3 +14,4 @@ if __name__ == '__main__':
     nx = r'C:\Program Files\Siemens\NX 12.0\NXBIN\run_journal.exe '
     nx += nx_script
     p = subprocess.call(nx)
+    time.sleep(1)
