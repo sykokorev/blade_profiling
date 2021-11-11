@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-import pip
+
 import os
 import pandas as pd
 import itertools
 import math
+import numpy as np
+#import bezier
 
 from _collections_abc import MutableMapping
 
@@ -45,6 +47,80 @@ def get_unique_keys(*args):
     for el in args:
         unique_keys.intersection_update(el)
     return tuple(unique_keys)
+
+
+def factorial(n: int):
+    if n == 0:
+        return 1
+    else:
+        return n * factorial(n - 1)
+
+
+def bezier_curve(points: list, t: float):
+    n = len(points) - 1
+    x = ((1 - t) ** n) * points[0][0]
+    y = ((1 - t) ** n) * points[0][1]
+
+    for i in range(1, n):
+        binomial = factorial(n) / (factorial(i) * factorial(n - i))
+        polynomial = binomial * (t ** i) * ((1 - t) ** (n - i))
+        x += polynomial * points[i][0]
+        y += polynomial * points[i][1]
+    x += (t ** n) * points[n][0]
+    y += (t ** n) * points[n][1]
+
+    return x, y
+
+
+def bezier_coefficient(lst: list):
+    c = []
+    n = len(lst) - 1
+    for j in range(n + 1):
+        cx, cy = 0, 0
+        binom = factorial(n) / factorial(n - j)
+        for i in range(j + 1):
+            polynom = ((-1) ** (i + j)) / (factorial(i) * factorial(j - i))
+            cx += binom * polynom * lst[i][0]
+            cy += binom * polynom * lst[i][1]
+        c.append((cx, cy))
+    return c
+
+
+def curve_length(coefficients: list, intervals: list):
+    n = len(coefficients) - 1
+    dx = (intervals[0][0] - intervals[1][0]) / 1000
+
+
+def circle(x0: float = 0, y0: float = 0, r: float = 1,
+           phi_1: float = 0, phi_2: float = 360, n: int = 10, reverse: int = 1):
+    phi_1 = math.radians(phi_1)
+    phi_2 = math.radians(phi_2)
+    dphi = (phi_2 - phi_1) / n
+    xy = []
+
+    for i in list(range(0, n + 1)):
+        xy.append((
+            x0 + r * math.cos(phi_1 + i * dphi) * reverse,
+            y0 + r * math.sin(phi_1 + i * dphi) * reverse
+        ))
+
+    return xy
+
+
+def line_intersection(xy_slope: list):
+    x1, x2 = xy_slope[0][0], xy_slope[1][0]
+    y1, y2 = xy_slope[0][1], xy_slope[1][1]
+    slope1, slope2 = math.radians(xy_slope[0][2]), math.radians(xy_slope[1][2])
+
+    xp = y1 - y2 + x2 * math.tan(slope2) - x1 * math.tan(slope1)
+    xp /= (math.tan(slope2) - math.tan(slope1))
+    yp = y1 + math.tan(slope1) * (xp - x1)
+
+    return xp, yp
+
+
+def geom_turbo_create():
+    pass
 
 
 class Profiling:
@@ -89,7 +165,7 @@ class Profiling:
         if temperature > 473.15:
             a, b = 0.0847, 0.2202
         else:
-            a, b = 0.0918, -0.01#-0.0513
+            a, b = 0.0918, -0.01  # -0.0513
         conicity = a * d_rel + b
         if conicity > 1:
             conicity = 1
@@ -157,6 +233,7 @@ class Profiling:
             2: 'TRAILING_EDGE'
         }
         stack = {}
+        surface_type = {}
 
         df = pd.DataFrame(self._data_formation())
 
@@ -343,6 +420,7 @@ class Profiling:
                     self.slope_angle(self.z[stage][2], self.r_hub[stage][2],
                                      self.z[stage][3], self.r_hub[stage][3]),
                 ])
+                surface_type[stage] = ["CONICAL", "CONICAL"]
             elif surface_setup == 1:
                 self.ref_trace[stage] = tuple([
                     self.z[stage][0], self.z[stage][0],
@@ -358,6 +436,7 @@ class Profiling:
                     else self.r_hub[stage][3],
                     0, 0
                 ])
+                surface_type[stage] = ["CYLINDRICAL", "CYLINDRICAL"]
             else:
                 pass
 
@@ -458,6 +537,16 @@ class Profiling:
             list(zip(*arrays)), names=self.names
         )
         coordinates = coordinates.append(pd.DataFrame(stack, index=index))
+
+        arrays = [
+            ["STREAM_SURFACE_TYPE"] * 2,
+            ['gv'] + ['rb']
+        ]
+        index = pd.MultiIndex.from_tuples(
+            list(zip(*arrays)), names=self.names
+        )
+        coordinates = coordinates.append(pd.DataFrame(surface_type, index=index))
+
         arrays = [
             ['S1_DZ_PRIM', 'S2_DZ_PRIM', 'S3_DZ_PRIM'] * 2,
             ['gv'] * 3 + ['rb'] * 3
@@ -478,6 +567,8 @@ class Profiling:
             profile_law = self.laws['profile_law']
         if 'twist_law' in self.laws.keys():
             twist_law = self.laws['twist_law']
+
+        curve_type = {}
 
         # twist_law: 0 - twisted by constant circulation law;
         # twist_law: 1 - twisted by constant reactivity
@@ -630,7 +721,9 @@ class Profiling:
                     math.sin(math.radians(beta_2[2])) * 2 *
                     math.pi * self.r_tip[stage][3] / df[stage]['PK.ZЛ']
                 ]
+                curve_type[stage] = ["THROAT"]
             elif profile_law == 1:
+                curve_type[stage] = ["ORIGINAL"]
                 pass
             else:
                 pass
@@ -679,6 +772,15 @@ class Profiling:
         else:
             pass
 
+        arrays = [
+            ["SS_PS_CURVE_TYPE"] * 2,
+            ["gv"] + ["rb"]
+        ]
+        index = pd.MultiIndex.from_tuples(
+            list(zip(*arrays)), names=self.names
+        )
+        angles_throat = angles_throat.append((pd.DataFrame(curve_type, index=index)))
+
         return angles_throat
 
     def _gamma_compute(self, ksi_rb=0.3, ksi_gv=0.3):
@@ -695,11 +797,10 @@ class Profiling:
                 2 * self.r_tip[stage][2] * math.pi / df[stage]["PK.ZЛ"]
             ]
 
-            b_rb = [a[0] / a[1] for a in zip(t_rb, [df[stage]["PK.T/L"]]*3)]
+            b_rb = [a[0] / a[1] for a in zip(t_rb, [df[stage]["PK.T/L"]] * 3)]
 
             gamma_rb = [a[0] / a[1] if a[0] / a[1] < 1 else 1
                         for a in zip(self.b1[stage][3:], b_rb)]
-
 
             gamma[stage] = (
                 90 - (self.alfa[stage][3] + ksi_gv *
@@ -800,17 +901,20 @@ class Profiling:
 
         return z
 
-    def generate_param_file(self, **kwargs):
-
-        param_dir = os.path.join(self.root_dir, 'param')
-        self.dir_handle.create_dir(param_dir)
-
+    def data_store(self):
         self.ab_data = self.ab_data.append(self._coordinates())
         self.ab_data = self.ab_data.append(self._twist_law())
         self.ab_data = self.ab_data.append(self._gamma_compute())
         self.ab_data = self.ab_data.append(self.number_of_blades())
 
-        for stage in self.ab_data.columns:
+        return self.ab_data
+
+    def generate_param_file(self, data, **kwargs):
+
+        param_dir = os.path.join(self.root_dir, 'param')
+        self.dir_handle.create_dir(param_dir)
+
+        for stage in data.columns:
             for each in self.ab_data[stage].groupby('rs'):
                 num_param = len(each[1]) + len(kwargs)
                 param_str = ''
@@ -826,20 +930,15 @@ class Profiling:
                 with open(file_name, 'w') as f:
                     f.write(param_str)
 
-    def generate_par_file(self, **kwargs):
+    def generate_par_file(self, data, **kwargs):
         root = os.getcwd()
         par_dir = os.path.join(self.root_dir, 'par')
-        par_sample = os.path.join(root, 'par_samples', 'sample.par')
+        par_sample = os.path.join(root, 'par_samples', 'turbine_sample.par')
         log_msg, is_created = self.dir_handle.create_dir(par_dir)
 
-        self.ab_data = self.ab_data.append(self._coordinates())
-        self.ab_data = self.ab_data.append(self._twist_law())
-        self.ab_data = self.ab_data.append(self._gamma_compute())
-        self.ab_data = self.ab_data.append(self.number_of_blades())
-
         if is_created:
-            for stage in self.ab_data.columns:
-                for each in self.ab_data[stage].groupby('rs'):
+            for stage in data.columns:
+                for each in data[stage].groupby('rs'):
                     par_file = os.path.join(par_dir, f'{each[0]}{stage}.par')
                     try:
                         with open(par_sample, 'r') as sample:
@@ -850,10 +949,18 @@ class Profiling:
                                     words = line.split()
                                     if len(words) == 2:
                                         if (str(words[0]) == "NI_BEGIN" and
-                                                str(words[1]) in ["PARAMETERS", "PARAMETER", "STACKING_POINT"]):
+                                                str(words[1]) in ["PARAMETERS",
+                                                                  "PARAMETER",
+                                                                  "STACKING_POINT",
+                                                                  "STREAM_SURFACES",
+                                                                  "SIDES_MODE"]):
                                             is_param_block = True
                                         elif (str(words[0]) == "NI_END" and
-                                                str(words[1]) in ["PARAMETERS", "PARAMETER", "STACKING_POINT"]):
+                                              str(words[1]) in ["PARAMETERS",
+                                                                "PARAMETER",
+                                                                "STACKING_POINT",
+                                                                "STREAM_SURFACES",
+                                                                "SIDES_MODE"]):
                                             is_param_block = False
                                             param = False
                                         elif is_param_block:
@@ -863,6 +970,18 @@ class Profiling:
                                                         key = k[0]
                                                         param = True
                                             elif str(words[0]) in ["STACKING_POINT"]:
+                                                for k in each[1].keys():
+                                                    if k[0] in words:
+                                                        key = k[0]
+                                                        param = True
+                                                line = line.replace(str(words[1]), str(each[1][key][0]))
+                                            elif str(words[0]) in ["SS_PS_CURVE_TYPE"]:
+                                                for k in each[1].keys():
+                                                    if k[0] in words:
+                                                        key = k[0]
+                                                        param = True
+                                                line = line.replace(str(words[1]), str(each[1][key][0]))
+                                            elif str(words[0]) in ["STREAM_SURFACE_TYPE"]:
                                                 for k in each[1].keys():
                                                     if k[0] in words:
                                                         key = k[0]
@@ -924,3 +1043,147 @@ class Profiling:
                     c = zip(z[stage], r_hub[stage])
                     for e in c:
                         fhub.write(f'{e[0]},{e[1]},0\n')
+
+    def airfoil_data(self, data):
+
+        out_data = pd.DataFrame()
+        beta = {}
+        gamma = {}
+        re = {}
+        throat = {}
+        r_sec = {}
+        t = {}
+        b_ax = {}
+        b = {}
+        x0 = {}
+        y0 = {}
+        for n in data.columns:
+            beta[n] = {}
+            gamma[n] = {}
+            re[n] = {}
+            throat[n] = {}
+            r_sec[n] = {}
+            t[n] = {}
+            b_ax[n] = {}
+            b[n] = {}
+            x0[n] = {}
+            y0[n] = {}
+            print(data[n])
+            for blade in data[n].groupby('rs'):
+                beta[n][blade[0]] = [
+                    [blade[1]['S1_CAMBER_BETA1'],
+                     blade[1]['S1_CAMBER_BETA2']],
+                    [blade[1]['S2_CAMBER_BETA1'],
+                     blade[1]['S2_CAMBER_BETA2']],
+                    [blade[1]['S3_CAMBER_BETA1'],
+                     blade[1]['S3_CAMBER_BETA2']]
+                ]
+
+                gamma[n][blade[0]] = [
+                    blade[1]['S1_CAMBER_GAMMA'],
+                    blade[1]['S2_CAMBER_GAMMA'],
+                    blade[1]['S2_CAMBER_GAMMA']
+                ]
+
+                re[n][blade[0]] = [
+                    [blade[1]['S1_LE_RADIUS'], blade[1]['S1_TE_RADIUS']],
+                    [blade[1]['S2_LE_RADIUS'], blade[1]['S2_TE_RADIUS']],
+                    [blade[1]['S3_LE_RADIUS'], blade[1]['S3_TE_RADIUS']]
+                ]
+
+                throat[n][blade[0]] = [
+                    blade[1]['S1_THROAT_WIDTH'],
+                    blade[1]['S2_THROAT_WIDTH'],
+                    blade[1]['S3_THROAT_WIDTH']
+                ]
+
+                r_sec[n][blade[0]] = [
+                    blade[1]['HUB_R2'],
+                    (blade[1]['HUB_R2'] + blade[1]['SHROUD_R2']) / 2,
+                    blade[1]['SHROUD_R2']
+                ]
+
+                t[n][blade[0]] = [
+                    2 * math.pi * ri / blade[1]['NB'] for ri in r_sec[n][blade[0]]
+                ]
+
+                b_ax[n][blade[0]] = [
+                    blade[1]['S1_DZ_PRIM'],
+                    blade[1]['S2_DZ_PRIM'],
+                    blade[1]['S3_DZ_PRIM']
+                ]
+
+                b[n][blade[0]] = [
+                    b_axi[0] / math.cos(math.radians(b_axi[1])) for
+                    b_axi in zip(b_ax[n][blade[0]], gamma[n][blade[0]])
+                ]
+
+                stacking = blade[1]['STACKING_POINT']
+                if stacking == 'LEADING_EDGE':
+                    x0[n][blade[0]] = [
+                        blade[1]['']
+                    ]
+                y0[n][blade[0]] = []
+
+
+if __name__ == "__main__":
+    common_class = CommonClass()
+    root_dir = os.getcwd()
+    curves_files_dir = os.path.join(root_dir, 'curves')
+    par_dir = os.path.join(root_dir, 'par')
+    igs_files_dir = os.path.join(root_dir, 'igs')
+
+    is_created, msg = common_class.create_dir(igs_files_dir)
+
+    input_file = os.path.join(root_dir, "St_base_m90.REZ")
+    geometrical_parameters = tuple([
+        'AL0', 'AL1', 'AL2', 'BE2', 'BE1K', 'BE1П', 'BE1',
+        'HЛ', 'T', 'A/T', 'D1', 'D2', 'B', 'ZЛ', 'L',
+        'ГAMMA', 'TETA', 'HAД', 'PO', 'POK', 'FИ', 'V1', 'LU',
+        'T2*', 'T/L'
+    ])
+
+    # Laws
+    laws = {
+        'stacking_law': [1, 0],  # [gv, rb], 0 - Center of gravity; 1 - LE, 2 - TE
+        'surface_setup': 1,  # 0 - Conical, 1 - Cylindrical
+        'twist_law': 1,  # 0 - Constant circulation, 1 - Constant alfa1
+        'profile_law': 0  # 0 - Throat base, 1 - Legacy
+    }
+
+    rs_name = tuple(['Init', 'PK', 'CA'])
+
+    profiler = Profiling(
+        input_file,
+        geometrical_parameters,
+        rs_name,
+        **laws
+    )
+
+    profiler.get_data()
+    profiler.airfoil_data(profiler.data_store())
+
+    # pnts_def = [[2.902927, 3.131038], [15.49333, 4.084344], [52.85737, 80.72594]]
+    # ti = 10
+    # bezier_module = []
+    # bezier_def = []
+    #
+    # intersection = line_intersection([[2.903, 3.131, 4.33], [52.857, 80.726, 64.01]])
+    #
+    # pnts = [
+    #     [2.902927, 15.49333, 52.85737],
+    #     [3.131038, 4.084344, 80.72594]
+    # ]
+    # curve = bezier.Curve.from_nodes(pnts)
+    # # print(curve.length)
+    #
+    # for i in range(ti):
+    #     a = i / ti
+    #     bezier_module.append(curve.evaluate(a))
+    #
+    # for i in list(range(0, ti+1)):
+    #     a = i / ti
+    #     bezier_def.append(bezier_curve(pnts_def, a))
+
+    # for pnt in bezier_module:
+    #     for p in
